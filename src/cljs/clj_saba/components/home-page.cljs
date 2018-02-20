@@ -89,6 +89,7 @@
         ]
        [:div.centered.row {:style {:height "10vh" :position "fixed" :bottom 30 :display "flex", :align-items "center"}}
         [:p {:class "copyright" :style {:padding 15}} "Created by Jaba V Tkemaladze, Akaki V Tkemaladze, Natalia J Tkemaladze, Akaki A Tkemaladze, Lela Gotua © 1999"]
+
         ]
        ]
 
