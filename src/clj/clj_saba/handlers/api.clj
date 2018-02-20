@@ -15,10 +15,11 @@
                                                            (q/limit (d :lim))
                                                            (q/fields [ :word ])
                                                            ) true))
-          {:body (pr-str (map-indexed #(do
-                                        ;(merge (update %2 :_id (fn [x] (clojure.core/str %1))) )
-                                        {:key (clojure.core/str (%2 :_id)) :title (%2 :word) }
-                                        ) qry))}
+          (def qr2 (mc/count db "sitkviskona" {:word (re-pattern (str "^" (d :kw)))}))
+          (prn qr2)
+          (let [ls (map #(do {:key (clojure.core/str (% :_id)) :title (% :word)}) qry)]
+            {:body (pr-str (if (< qr2 (d :lim)) ls (concat ls [{:title (str "load-more " "(" (- qr2 (d :lim)) ")") :key 0}])))}
+            )
           )
           )
 

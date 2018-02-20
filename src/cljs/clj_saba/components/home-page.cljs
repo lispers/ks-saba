@@ -11,21 +11,22 @@
             [clj-saba.util :refer [scroll-to-id]])
   )
 (def app-state
-  (reagent/atom {:lim 5})
+  (reagent/atom {:lim 5 :open true})
   )
 (defn update-state [key val]
   (swap! app-state assoc-in [key] val)
   )
 (defn result-renderer [x]
   (let [data (js->clj x :keywordize-keys true)]
-    (reagent/as-element [:div {:class "ui" :id (if (= (data :title) "load-more") "load-more")} (data :title)]))
+    (reagent/as-element [:div {:class "ui" :id (if (clojure.string/includes? (data :title) "load-more") "load-more")} (data :title)]))
   )
 (defn result-select [x,y]
   (update-state :results [((js->clj y :keywordize-keys true) :result)])
   (((js->clj y :keywordize-keys true) :result) :title)
   )
 (defn update-results [val]
-  (go
+  (if (< (alength val) 1) (update-state :results [])
+    (go
    (let [response (<! (http/post "/api/search"
                                  ;; parameters
                                  {:with-credentials? false
@@ -33,9 +34,9 @@
                                   :as "vector"}))]
      (update-state :loading true)
      (<! (timeout 100))
-     (update-state :results (concat (into [] (cljs.reader/read-string (:body  response))) [{:key 0 :title "load-more"}] ))
+     (update-state :results (concat (into [] (cljs.reader/read-string (:body  response)))))
      (update-state :loading false)
-     )))
+     ))))
 (defn home-page []
   (let [val (atom "")]
 
@@ -57,18 +58,21 @@
                         :results (:results @app-state)
                         :showNoResults false
                         :fluid true
-                        :open true
+                        :onBlur #(update-state :open false)
+                        :onFocus #(update-state :open true)
+                        :open (:open @app-state)
                         :resultRenderer result-renderer
                         :onResultSelect #(do
                                           (let [sel (((js->clj %2 :keywordize-keys true) :result) :title)]
-                                            (prn sel)
-                                            (if (not (= sel "load-more"))
+                                            (prn sel (clojure.string/includes? sel "load-more"))
+                                            (if (not (clojure.string/includes? sel "load-more"))
                                               (do
                                                (result-select %1 %2) (reset! val sel))
                                               (do
                                                 (.preventDefault %1)
                                                 (update-state :lim (+ (:lim @app-state) 5))
                                                 (reset! val (-> %2 .-value))
+                                                (update-state :open true)
                                                 (update-state :kw @val)
                                                 (update-results @val)
                                                 (scroll-to-id "load-more")
@@ -89,7 +93,6 @@
         ]
        [:div.centered.row {:style {:height "10vh" :position "fixed" :bottom 30 :display "flex", :align-items "center"}}
         [:p {:class "copyright" :style {:padding 15}} "Created by Jaba V Tkemaladze, Akaki V Tkemaladze, Natalia J Tkemaladze, Akaki A Tkemaladze, Lela Gotua © 1999"]
-
         ]
        ]
 
