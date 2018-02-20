@@ -18,7 +18,7 @@
   )
 (defn result-renderer [x]
   (let [data (js->clj x :keywordize-keys true)]
-    (reagent/as-element [:div {:class "ui" :id (if (clojure.string/includes? (data :title) "load-more") "load-more")} (data :title)]))
+    (reagent/as-element [:div {:class "ui sel-res" :id (if (clojure.string/includes? (data :title) "load-more") "load-more")} (data :title)]))
   )
 (defn result-select [x,y]
   (update-state :results [((js->clj y :keywordize-keys true) :result)])
@@ -42,6 +42,13 @@
 
     (fn []
       [:div.ui.grid
+
+       {:on-click #(do
+                    (let [hit (-> %1 .-target .-className)]
+                      (prn hit)
+                      (or (clojure.string/includes? hit "sel-res") (clojure.string/includes? hit "result") (clojure.string/includes? hit "prompt")(update-state :open false))
+                      )
+                    )}
        [:div.centered.row {:style {:height "10vh"}}
         [:div.twelve.wide.column
          [:h1  {:style {:text-align "center"}}
@@ -58,11 +65,11 @@
                         :results (:results @app-state)
                         :showNoResults false
                         :fluid true
-                        :onBlur #(update-state :open false)
                         :onFocus #(update-state :open true)
                         :open (:open @app-state)
                         :resultRenderer result-renderer
                         :onResultSelect #(do
+                                          (update-state :open true)
                                           (let [sel (((js->clj %2 :keywordize-keys true) :result) :title)]
                                             (prn sel (clojure.string/includes? sel "load-more"))
                                             (if (not (clojure.string/includes? sel "load-more"))
@@ -72,7 +79,6 @@
                                                 (.preventDefault %1)
                                                 (update-state :lim (+ (:lim @app-state) 5))
                                                 (reset! val (-> %2 .-value))
-                                                (update-state :open true)
                                                 (update-state :kw @val)
                                                 (update-results @val)
                                                 (scroll-to-id "load-more")
