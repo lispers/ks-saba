@@ -7,23 +7,38 @@
             [cljs-http.client :as http]
             [secretary.core :as secretary :include-macros true]
             [accountant.core :as accountant]
-            [cljs.core.async :refer [<! timeout]])
+            [cljs.core.async :refer [<! timeout]]
+            [clj-saba.util :refer [scroll-to-id]])
   )
 (def app-state
-  (reagent/atom {})
+  (reagent/atom {:lim 5})
   )
 (defn update-state [key val]
   (swap! app-state assoc-in [key] val)
   )
 (defn result-renderer [x]
-  (reagent/as-element [:div {:class "ui"} ((js->clj x :keywordize-keys true) :title)])
+  (let [data (js->clj x :keywordize-keys true)]
+    (reagent/as-element [:div {:class "ui" :id (if (= (data :title) "load-more") "load-more")} (data :title)]))
   )
 (defn result-select [x,y]
   (update-state :results [((js->clj y :keywordize-keys true) :result)])
   (((js->clj y :keywordize-keys true) :result) :title)
   )
+(defn update-results [val]
+  (go
+   (let [response (<! (http/post "/api/search"
+                                 ;; parameters
+                                 {:with-credentials? false
+                                  :json-params {:data {:kw val :lim (:lim @app-state)}}
+                                  :as "vector"}))]
+     (update-state :loading true)
+     (<! (timeout 100))
+     (update-state :results (concat (into [] (cljs.reader/read-string (:body  response))) [{:key 0 :title "load-more"}] ))
+     (update-state :loading false)
+     )))
 (defn home-page []
   (let [val (atom "")]
+
     (fn []
       [:div.ui.grid
        [:div.centered.row {:style {:height "10vh"}}
@@ -42,21 +57,29 @@
                         :results (:results @app-state)
                         :showNoResults false
                         :fluid true
+                        :open true
                         :resultRenderer result-renderer
-                        :onResultSelect #(reset! val (result-select %1 %2))
+                        :onResultSelect #(do
+                                          (let [sel (((js->clj %2 :keywordize-keys true) :result) :title)]
+                                            (prn sel)
+                                            (if (not (= sel "load-more"))
+                                              (do
+                                               (result-select %1 %2) (reset! val sel))
+                                              (do
+                                                (.preventDefault %1)
+                                                (update-state :lim (+ (:lim @app-state) 5))
+                                                (reset! val (-> %2 .-value))
+                                                (update-state :kw @val)
+                                                (update-results @val)
+                                                (scroll-to-id "load-more")
+                                                )
+                                              )
+                                            )
+                                          )
                         :onSearchChange #(do  (reset! val (-> %2 .-value))
+                                          (update-state :lim 5)
                                           (update-state :kw @val)
-                                          (go
-                                           (let [response (<! (http/post "/api/search"
-                                                                         ;; parameters
-                                                                         {:with-credentials? false
-                                                                          :json-params {:kw @val}
-                                                                          :as "vector"}))]
-                                             (update-state :loading true)
-                                             (<! (timeout 100))
-                                             (update-state :results (into [] (cljs.reader/read-string (:body  response))))
-                                             (update-state :loading false)
-                                             ))
+                                          (update-results @val)
                                           )
                         }]
             ]
@@ -64,8 +87,8 @@
           ]
          ]
         ]
-       [:div.centered.row {:style {:height "10vh"}}
-        [:p {:class "copyright"} "Created by Jaba V Tkemaladze, Akaki V Tkemaladze, Natalia J Tkemaladze, Akaki A Tkemaladze, Lela Gotua © 1999"]
+       [:div.centered.row {:style {:height "10vh" :position "fixed" :bottom 30 :display "flex", :align-items "center"}}
+        [:p {:class "copyright" :style {:padding 15}} "Created by Jaba V Tkemaladze, Akaki V Tkemaladze, Natalia J Tkemaladze, Akaki A Tkemaladze, Lela Gotua © 1999"]
         ]
        ]
 
