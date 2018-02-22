@@ -11,14 +11,23 @@
             [clj-saba.util :refer [scroll-to-id]])
   )
 (def app-state
-  (reagent/atom {:lim 5 :open true})
+  (reagent/atom {:lim 5 :open true :compact false})
   )
 (defn update-state [key val]
   (swap! app-state assoc-in [key] val)
   )
+(defn make-label [color name]
+  [:div {:style {:display "flex" :align-items "center"}} [sa/Label {:circular true :color color :empty true :style {:margin-right 5 :margin-left 5}}] name])
 (defn result-renderer [x]
   (let [data (js->clj x :keywordize-keys true)]
-    (reagent/as-element [:div {:class "ui sel-res" :id (if (clojure.string/includes? (data :title) "load-more") "load-more")} (data :title)]))
+    (defn cnt [c]
+      (c (cljs.reader/read-string (data :description)))
+      )
+    (reagent/as-element [:div {:class "ui sel-res" :style {:display "flex"} :id (if (clojure.string/includes? (data :title) "load-more") "load-more")}
+                         (data :title) (if (> (cnt :w-count) 0) (make-label "red" (cnt :w-count)))
+                         (if (> (cnt :t-count) 0) (make-label "yellow" (cnt :t-count)))
+                         (if (> (cnt :s-count) 0) (make-label "green" (cnt :s-count)))
+                         ]))
   )
 (defn result-select [x,y]
   (update-state :results [((js->clj y :keywordize-keys true) :result)])
@@ -30,22 +39,21 @@
    (let [response (<! (http/post "/api/search"
                                  ;; parameters
                                  {:with-credentials? false
-                                  :json-params {:data {:kw val :lim (:lim @app-state)}}
+                                  :json-params {:data {:kw val :lim (:lim @app-state) :compact (:compact @app-state)}}
                                   :as "vector"}))]
      (update-state :loading true)
      (<! (timeout 100))
      (update-state :results (concat (into [] (cljs.reader/read-string (:body  response)))))
      (update-state :loading false)
+     (<! (timeout 100))
+     (scroll-to-id "load-more")
      ))))
 (defn home-page []
   (let [val (atom "")]
-
     (fn []
       [:div.ui.grid
-
        {:on-click #(do
                     (let [hit (-> %1 .-target .-className)]
-                      (prn hit)
                       (or (clojure.string/includes? hit "sel-res") (clojure.string/includes? hit "result") (clojure.string/includes? hit "prompt")(update-state :open false))
                       )
                     )}
@@ -57,10 +65,18 @@
         ]
        [:div.centered.row {:style {:height "80vh"}}
         [:div.ten.wide.field {:style {:display "flex", :height "fit-content", :top "40%", :position "absolute"}}
-         [:div.centered.row
+         [:div.centered.row {:style {:display "flex", :flex-direction "column"}}
+          [:div {:style {:display "flex"}}
+           (make-label "red" "word")
+           (make-label "yellow" "translation")
+           (make-label "green" "scolio")
+           ]
+          [:div {:style {:margin 5 :display "flex"}} [sa/Radio {:toggle true
+                                                                :checked (:compact @app-state)
+                                                                :on-change #(do (update-state :compact (if (not (:compact @app-state)) true false)))
+                                                                :style {:margin-right 10}}] (if (:compact @app-state) "compact")]
           [:div {:class "ui search"}
            [:div {:class "ui icon input"}
-            ;(atom-search val)
             [sa/Search {:name "keyword" :placeholder "" :loading (:loading @app-state)  :value @val
                         :results (:results @app-state)
                         :showNoResults false
@@ -81,7 +97,8 @@
                                                 (reset! val (-> %2 .-value))
                                                 (update-state :kw @val)
                                                 (update-results @val)
-                                                (scroll-to-id "load-more")
+
+                                                ;(.scrollIntoView (.getElementById js/document "load-more") true)
                                                 )
                                               )
                                             )
