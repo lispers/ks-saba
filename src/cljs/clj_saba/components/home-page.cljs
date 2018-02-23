@@ -24,7 +24,8 @@
       (c (cljs.reader/read-string (data :description)))
       )
     (reagent/as-element [:div {:class "ui sel-res" :style {:display "flex"} :id (if (clojure.string/includes? (data :title) "load-more") "load-more")}
-                         (data :title) (if (> (cnt :w-count) 0) (make-label "red" (cnt :w-count)))
+                         (data :title) (if (clojure.string/includes? (data :title) "load-more") (if (:loading @app-state) [sa/Loader {:style {:display "flex" :align-self "center"
+                                                                                                                    :margin-left 5}  :active true :inline true :size "mini"}])) (if (> (cnt :w-count) 0) (make-label "red" (cnt :w-count)))
                          (if (> (cnt :t-count) 0) (make-label "yellow" (cnt :t-count)))
                          (if (> (cnt :s-count) 0) (make-label "green" (cnt :s-count)))
                          ]))
@@ -34,20 +35,31 @@
   (((js->clj y :keywordize-keys true) :result) :title)
   )
 (defn update-results [val]
-  (if (< (alength val) 1) (update-state :results [])
-    (go
+  (if (or (< (alength (clojure.string/trim val)) 1) (re-find #"\\|\^|\)|\(" val)) (update-state :results [])
+   (do
+     (update-state :loading true)
+      (go
    (let [response (<! (http/post "/api/search"
                                  ;; parameters
                                  {:with-credentials? false
                                   :json-params {:data {:kw val :lim (:lim @app-state) :compact (:compact @app-state)}}
                                   :as "vector"}))]
-     (update-state :loading true)
      (<! (timeout 100))
      (update-state :results (concat (into [] (cljs.reader/read-string (:body  response)))))
      (update-state :loading false)
      (<! (timeout 100))
-     (scroll-to-id "load-more")
-     ))))
+     (if (not (= (.indexOf (pr-str :results @app-state) "load-more") -1)) (scroll-to-id "load-more"))
+     )))))
+(defn get-records [val]
+  (go
+   (let [response (<! (http/post "/api/get-records"
+                                 {:with-credentials? false
+                                  :json-params {:data {:kw val :lim (:lim @app-state) :compact (:compact @app-state)}}
+                                  :as "vector"}))]
+     (js/console.log (concat (into [] (cljs.reader/read-string (:body  response)))))
+     )
+    )
+  )
 (defn home-page []
   (let [val (atom "")]
     (fn []
@@ -64,7 +76,7 @@
          ]
         ]
        [:div.centered.row {:style {:height "80vh"}}
-        [:div.ten.wide.field {:style {:display "flex", :height "fit-content", :top "40%", :position "absolute"}}
+        [:div.ten.wide.field {:style {:display "flex" :height "fit-content" :top (if (:selected @app-state) 0 "40%") :transition "0.1s" :position "absolute"}}
          [:div.centered.row {:style {:display "flex", :flex-direction "column"}}
           [:div {:style {:display "flex"}}
            (make-label "red" "word")
@@ -87,25 +99,22 @@
                         :onResultSelect #(do
                                           (update-state :open true)
                                           (let [sel (((js->clj %2 :keywordize-keys true) :result) :title)]
-                                            (prn sel (clojure.string/includes? sel "load-more"))
                                             (if (not (clojure.string/includes? sel "load-more"))
                                               (do
-                                               (result-select %1 %2) (reset! val sel))
+                                               (result-select %1 %2) (reset! val sel) (update-state :selected true) (update-state :open false)
+                                                (get-records sel)
+                                                )
                                               (do
                                                 (.preventDefault %1)
                                                 (update-state :lim (+ (:lim @app-state) 5))
                                                 (reset! val (-> %2 .-value))
                                                 (update-state :kw @val)
                                                 (update-results @val)
-
-                                                ;(.scrollIntoView (.getElementById js/document "load-more") true)
-                                                )
-                                              )
-                                            )
-                                          )
+                                                ))))
                         :onSearchChange #(do  (reset! val (-> %2 .-value))
                                           (update-state :lim 5)
                                           (update-state :kw @val)
+                                          (update-state :selected false)
                                           (update-results @val)
                                           )
                         }]
