@@ -16,6 +16,7 @@
 (defn update-state [key val]
   (swap! app-state assoc-in [key] val)
   )
+(def noborder {:border "none" :box-shadow "none"})
 (defn make-label [color name]
   [:div {:style {:display "flex" :align-items "center"}} [sa/Label {:circular true :color color :empty true :style {:margin-right 5 :margin-left 5}}] name])
 (defn result-renderer [x]
@@ -54,16 +55,16 @@
   (go
    (let [response (<! (http/post "/api/get-records"
                                  {:with-credentials? false
-                                  :json-params {:data {:kw val :lim (:lim @app-state) :compact (:compact @app-state)}}
+                                  :json-params {:data {:kw val}}
                                   :as "vector"}))]
-     (js/console.log (concat (into [] (cljs.reader/read-string (:body  response)))))
+     (update-state :records (into [] (cljs.reader/read-string (:body  response))))
      )
     )
   )
 (defn home-page []
   (let [val (atom "")]
     (fn []
-      [:div.ui.grid
+      [:div.ui.container
        {:on-click #(do
                     (let [hit (-> %1 .-target .-className)]
                       (or (clojure.string/includes? hit "sel-res") (clojure.string/includes? hit "result") (clojure.string/includes? hit "prompt")(update-state :open false))
@@ -75,9 +76,9 @@
           "ცოდნის სისტემა"]
          ]
         ]
-       [:div.centered.row {:style {:height "80vh"}}
-        [:div.ten.wide.field {:style {:display "flex" :height "fit-content" :top (if (:selected @app-state) 0 "40%") :transition "0.1s" :position "absolute"}}
-         [:div.centered.row {:style {:display "flex", :flex-direction "column"}}
+       [sa/SegmentGroup {:style (merge {:height "80vh" :width "100%" :display "flex" :flex-direction "column" :margin 0} noborder)}
+        [sa/GridRow {:style {:display "flex" :height "fit-content" :top (if (:selected @app-state) 0 "0%") :transition "0.1s"}}
+         [:div.centered.row {:style {:display "flex", :flex-direction "column" :margin "0 auto"}}
           [:div {:style {:display "flex"}}
            (make-label "red" "word")
            (make-label "yellow" "translation")
@@ -88,7 +89,7 @@
                                                                 :on-change #(do (update-state :compact (if (not (:compact @app-state)) true false)))
                                                                 :style {:margin-right 10}}] (if (:compact @app-state) "compact")]
           [:div {:class "ui search"}
-           [:div {:class "ui icon input"}
+           [:div
             [sa/Search {:name "keyword" :placeholder "" :loading (:loading @app-state)  :value @val
                         :results (:results @app-state)
                         :showNoResults false
@@ -122,13 +123,26 @@
            ]
           ]
          ]
+          (if (> (-> (:records @app-state) count) 0)
+            (do
+              (def panes
+                [
+                  {:menuItem "word" :key 1 :render #(reagent/as-element [sa/TabPane "test 123123123 111 word"])}
+                  {:menuItem "translation" :key 2 :render #(reagent/as-element [sa/TabPane "test 123123123 111 translation"])}
+                  {:menuItem "scolio" :key 3 :render #(reagent/as-element [sa/TabPane "test 123123123 111 scolio"])}
+                ]
+                )
+             [sa/SegmentGroup {:style (merge noborder {:margin-top 10})}
+              [sa/Segment  [sa/Tab {:style {:margin "0 auto"} :menu {:secondary true} :panes panes}]]
+             ]
+              ))
         ]
-       [:div.centered.row {:style {:height "10vh" :position "fixed" :bottom 30 :display "flex", :align-items "center"}}
-        [:p {:class "copyright" :style {:padding 15}} "Created by Jaba V Tkemaladze, Akaki V Tkemaladze, Natalia J Tkemaladze, Akaki A Tkemaladze, Lela Gotua © 1999"]
+       [sa/SegmentGroup {:style noborder}
+       [sa/Segment {:style {:text-align "center"}}
+          [:p {:class "copyright" :style {:padding 15}} "Created by Jaba V Tkemaladze, Akaki V Tkemaladze, Natalia J Tkemaladze, Akaki A Tkemaladze, Lela Gotua © 1999"]
+        ]
         ]
        ]
-
       )
-
     )
   )
