@@ -11,7 +11,7 @@
             [clj-saba.util :refer [scroll-to-id]])
   )
 (def app-state
-  (reagent/atom {:lim 5 :open true :compact false})
+  (reagent/atom {:lim 5 :open true :compact false :active-tab 0})
   )
 (defn update-state [key val]
   (swap! app-state assoc-in [key] val)
@@ -104,6 +104,7 @@
                                               (do
                                                (result-select %1 %2) (reset! val sel) (update-state :selected true) (update-state :open false)
                                                 (get-records sel)
+                                                (update-state :active-tab 0)
                                                 )
                                               (do
                                                 (.preventDefault %1)
@@ -125,15 +126,17 @@
          ]
           (if (> (-> (:records @app-state) count) 0)
             (do
+              (defn check-table [num] (not (empty? (filter #(= (% :table) num) (:records @app-state)))))
+              (defn handle-tab [e,d]  (update-state :active-tab (-> d (js->clj :keywordize-keys true) :activeIndex))) ;(update-state :active-tab (:activeIndex d)))
               (def panes
                 [
-                  {:menuItem "word" :key 1 :render #(reagent/as-element [sa/TabPane "test 123123123 111 word"])}
-                  {:menuItem "translation" :key 2 :render #(reagent/as-element [sa/TabPane "test 123123123 111 translation"])}
-                  {:menuItem "scolio" :key 3 :render #(reagent/as-element [sa/TabPane "test 123123123 111 scolio"])}
+                  (if (check-table 1) {:menuItem "word" :key 1 :render #(reagent/as-element [sa/TabPane "test 123123123 111 word"])})
+                  (if (check-table 2) {:menuItem "translation" :key 2 :render #(reagent/as-element [sa/TabPane "test 123123123 111 translation"])})
+                  (if (check-table 3) {:menuItem "scolio" :key 3 :render #(reagent/as-element [sa/TabPane "test 123123123 111 scolio"])})
                 ]
                 )
              [sa/SegmentGroup {:style (merge noborder {:margin-top 10})}
-              [sa/Segment  [sa/Tab {:style {:margin "0 auto"} :menu {:secondary true} :panes panes}]]
+              [sa/Segment  [sa/Tab {:activeIndex (or (:active-tab @app-state) 0) :onTabChange handle-tab :style {:margin "0 auto"} :menu {:secondary true} :panes panes}]]
              ]
               ))
         ]
